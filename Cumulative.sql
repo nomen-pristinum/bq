@@ -13,7 +13,7 @@ SELECT
     currency_id,
     sum(balance_delta) as cumulative_balance
 FROM  aggregated_deltas
-WHERE aggregated_deltas.tx_date <= ''-- desired date here
+WHERE aggregated_deltas.tx_date <= '2015-12-12'-- desired date here
 GROUP BY address_bin, currency_id;
 
 SELECT
@@ -41,8 +41,8 @@ SELECT
     d1.address_bin,
     d1.currency_id,
     sum(d2.balance_delta) as cumulative_balance
-FROM ethereum.aggregated_deltas_vw d1
-JOIN ethereum.aggregated_deltas_vw d2
+FROM ethereum.aggregated_deltas d1
+JOIN ethereum.aggregated_deltas d2
 ON d1.address_bin = d2.address_bin
 AND d1.currency_id = d2.currency_id
 WHERE d2.tx_date <= d1.tx_date
@@ -63,15 +63,25 @@ AND d1.currency_id = d2.currency_id
 WHERE d2.tx_date <= d1.tx_date
 GROUP BY d1.tx_date, d1.address_bin, d1.currency_id;
 
-/*CREATE VIEW ethereum.cumulative_balances_history_vw
+
+
+CREATE VIEW ethereum.cumulative_balances_history_vw
 AS
-SELECT
-    tx_date,
-    address_bin,
-    currency_id,
-    sumMerge(cumulative_balance) as cumulative_balance
-FROM cumulative_balances_history
-GROUP BY tx_date, address_bin, currency_id;*/
+select *
+from (
+    SELECT tx_date,
+         address_bin,
+         currency_id,
+         cumulative_balance,
+         max(tx_date) over (
+             partition by address_bin, currency_id)
+             as last_balance_date
+    FROM cumulative_balances_history
+    where tx_date <= today()
+)
+where tx_date = last_balance_date
+;
+
 
 SELECT
     *
