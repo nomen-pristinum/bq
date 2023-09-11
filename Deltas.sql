@@ -1,3 +1,5 @@
+--TO-DO
+--get rid of aggregated deltas 2
 CREATE TABLE ethereum.aggregated_deltas
 (
     tx_date Date,
