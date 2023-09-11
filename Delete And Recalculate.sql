@@ -1,3 +1,7 @@
+--TO-DO
+--currency ID
+--remove aggregated deltas 2
+--deal with current balances
 select * from discrepancy_log;
 
 delete from balance_deltas
