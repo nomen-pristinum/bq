@@ -1,6 +1,7 @@
 # Ethereum Balance Tracking System
 
-This system tracks balance changes on the Ethereum network, processes deltas, and maintains a history of cumulative balances. 
+This system tracks balance changes on the Ethereum network, processes deltas, and maintains a history of cumulative balances.
+
 v2.0 
 - Now supports insertions of many correction blocks at once. The standard logic is correction-aware and handles the regular operation vs. data fixes accordingly without the user intervention.
 - Current balances are now stored as well as the historical ones
