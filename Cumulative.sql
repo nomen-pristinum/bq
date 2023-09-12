@@ -25,8 +25,7 @@ SELECT
     address_bin,
     currency_id,
     value as balance
-FROM balance_deltas
-WHERE tx_date = today();
+FROM balance_deltas;
 
 --VW pulling the final SUM() FROM balances
 CREATE VIEW current_balances_vw
@@ -61,14 +60,22 @@ ORDER BY (tx_date, address_bin, currency_id);
 --MV inserting the changes of current balances into Cumulative History table
 CREATE MATERIALIZED VIEW cumulative_balances_history_mv
 TO cumulative_balances_history AS
-SELECT *
-FROM current_balances;
+select today() AS tx_date,
+       address_bin,
+       currency_id,
+       cb.balance --already updated
+           AS cumulative_balance
+from ( --just a trigger ensuring 1-1 join
+    SELECT address_bin,
+        currency_id,
+        sum(value) as daily_change
+    FROM balance_deltas
+    WHERE tx_date = today()
+    GROUP BY  address_bin, currency_id)
+JOIN current_balances_vw cb
+USING (address_bin, currency_id);
 
--- another MV for historical data fixes
---  WHERE < today(),
---  Cumulative History JOIN Changes
---  USING date, currency, address
---  insert change+old value*
+--another MV for historical data fixes
 CREATE MATERIALIZED VIEW cumulative_balances_history_fix_mv
 TO cumulative_balances_history
 AS
