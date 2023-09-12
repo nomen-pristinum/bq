@@ -2,7 +2,7 @@
 
 This system tracks balance changes on the Ethereum network, processes deltas, and maintains a history of cumulative balances.
 
-v2.0 
+## v2.0 
 - Now supports insertions of many correction blocks at once. The standard logic is correction-aware and handles the regular operation vs. data fixes accordingly without the user intervention.
 - Current balances are now stored as well as the historical ones
 - Overall performances is improved and all features work in milliseconds
@@ -16,11 +16,11 @@ The solution is organized into several SQL files, each serving a distinct purpos
 4. **Detect.sql**: Checking for discrepancies in the data.
 5. **Delete And Recalculate.sql**: Rectifying any discrepancies detected.
 
-How to use:
-Setup. On top of existing transaction storage data execute Base, Deltas, and Cumulative in that order. This will create objects and initialise the tables. After this the system handles normal operations, i.e. processes latest blocks in the chain as they come.
-Corrections. Delete the faulty block(s) from transaction storage and run Detect. This will create discrepancy_log with all the deleted blocks, metadata and datafix progress. After that execute Delete And Recalculate once per deleted block to bring the derived data up to date. Finally, insert the corrected block(s) into the transaction storage, it is picked up and reprocessed automatically.
+## How to use:
 
-Delete the faulty block(s).
+Setup. On top of existing transaction storage data execute Base, Deltas, and Cumulative in that order. This will create objects and initialise the tables. After this the system handles normal operations, i.e. processes latest blocks in the chain as they come.
+
+Corrections. Delete the faulty block(s) from transaction storage and run Detect. This will create discrepancy_log with all the deleted blocks, metadata and datafix progress. After that execute Delete And Recalculate once per deleted block to bring the derived data up to date. Finally, insert the corrected block(s) into the transaction storage, it is picked up and reprocessed automatically.
 
 ## [Base.sql](./Base.sql)
 
@@ -47,6 +47,7 @@ If discrepancies are found, this segment provides the mechanism to correct the b
 ### Notes
 
 - Ensure to execute scripts in the given order to maintain data integrity.
-- Known issue: Works with a delay. SummingMergeTree approach alone doesn't provide sufficient performance on a single node home server (x64/SSD). To avoid duplicates in the first seconds or minutes after bigger loads, data needs to be accessed with SUM() GROUP BY instead of directly, which if injected in code breaks triggers and joins(?). 
-- Not extensively tested with all the scenarios. It does handle multiple deleted blocks as an extra.
+- Fixed in v2: Known issue: Works with a delay. SummingMergeTree approach alone doesn't provide sufficient performance on a single node home server (x64/SSD). To avoid duplicates in the first seconds or minutes after bigger loads, data needs to be accessed with SUM() GROUP BY instead of directly, which if injected in code breaks triggers and joins(?). 
+- Not extensively tested with all the scenarios. It does handle multiple deleted blocks as an extra. Since v2 handles mass data fix insertions as it does normal opereration, through a separate cascade.
+- Complexity is increased in v2 as a justified tradeoff for easier and faster usage in real world operaton. Mass corrections are now possible as a result, as is smooth performance.
 - To discuss: advantages of dropping partitions/ALTER TABLE DELETE over the lightweight DELETE currently used. 
