@@ -1,12 +1,25 @@
 # Ethereum Balance Tracking System
 
-This system tracks balance changes on the Ethereum network, processes deltas, and maintains a history of cumulative balances. The solution is organized into several SQL files, each serving a distinct purpose:
+This system tracks balance changes on the Ethereum network, processes deltas, and maintains a history of cumulative balances. 
+v2.0 
+- Now supports insertions of many correction blocks at once. The standard logic is correction-aware and handles the regular operation vs. data fixes accordingly without the user intervention.
+- Current balances are now stored as well as the historical ones
+- Overall performances is improved and all features work in milliseconds
+- Some changes not thoroughly tested
+
+The solution is organized into several SQL files, each serving a distinct purpose:
 
 1. **Base.sql**: Setting up primary tables and views.
 2. **Deltas.sql**: Aggregating balance changes.
 3. **Cumulative.sql**: Generating cumulative balances based on aggregated deltas.
 4. **Detect.sql**: Checking for discrepancies in the data.
 5. **Delete And Recalculate.sql**: Rectifying any discrepancies detected.
+
+How to use:
+Setup. On top of existing transaction storage data execute Base, Deltas, and Cumulative in that order. This will create objects and initialise the tables. After this the system handles normal operations, i.e. processes latest blocks in the chain as they come.
+Corrections. Delete the faulty block(s) from transaction storage and run Detect. This will create discrepancy_log with all the deleted blocks, metadata and datafix progress. After that execute Delete And Recalculate once per deleted block to bring the derived data up to date. Finally, insert the corrected block(s) into the transaction storage, it is picked up and reprocessed automatically.
+
+Delete the faulty block(s).
 
 ## [Base.sql](./Base.sql)
 
