@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS discrepancy_log
 (
     block UInt32,
     address_bin String,
+    currency_id UInt32,
     block_time DateTime,
     detected_dtm DateTime,
     fixed_flag UInt8 DEFAULT 0,
@@ -14,8 +15,8 @@ ORDER BY (address_bin, detected_dtm);
 
 --delete from transfers_tx_storage where block = 622230;
 
-insert into discrepancy_log
-SELECT DISTINCT block, address_bin,
+INSERT INTO discrepancy_log
+SELECT DISTINCT block, address_bin, currency_id,
                 min(tx_time) over (partition by block),
                 now(), null, null, null
 FROM balance_deltas
@@ -24,10 +25,10 @@ WHERE block NOT IN (
     FROM transfers_tx_storage
     );
 
-alter table discrepancy_log
-update next_block_to_fix = (
-    select min(block)
-    from discrepancy_log
+ALTER TABLE discrepancy_log
+UPDATE next_block_to_fix = (
+    SELECT min(block)
+    FROM discrepancy_log
     WHERE fixed_flag = 0
 )
-where 1 = 1;
+WHERE 1 = 1;
