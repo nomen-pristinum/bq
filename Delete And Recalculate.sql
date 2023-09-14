@@ -15,13 +15,14 @@ AND tx_time >= (
     LIMIT 1 --safety
     ) ;
 
-DELETE FROM aggregated_deltas
+ALTER TABLE aggregated_deltas DELETE
+--select * from aggregated_deltas
 WHERE (address_bin, currency_id) IN (
     SELECT distinct address_bin, currency_id
     FROM discrepancy_log
     WHERE fixed_flag = 0
     AND block = next_block_to_fix)
-AND tx_date = (SELECT toDate(block_time)
+AND tx_date = (SELECT distinct toDate(block_time)
     FROM discrepancy_log
     WHERE fixed_flag = 0
     AND block = next_block_to_fix);
@@ -62,38 +63,62 @@ WHERE (address_bin, currency_id) IN (
 AND tx_date >=  -- everything is polluted
                 -- for the affected addresses
                 -- past this point in time:
-    (SELECT toDate(block_time)
+    (SELECT distinct toDate(block_time)
     FROM discrepancy_log
     WHERE fixed_flag = 0
     AND block = next_block_to_fix);
 
 INSERT INTO cumulative_balances_history
+WITH deltas AS (
+    --here we reach an order of magnitude less records through previous processing
+    SELECT
+        tx_date,
+        address_bin,
+        currency_id,
+        sum(balance_delta) as balance_delta
+    FROM ethereum.aggregated_deltas
+    GROUP BY tx_date, address_bin, currency_id
+),
+affected_deltas AS (
+    --here we reach an order of magnitude less records through previous processing
+    --and then of those only a subset of affected records enters the JOIN
+    SELECT
+        tx_date,
+        address_bin,
+        currency_id,
+        sum(balance_delta) as balance_delta
+    FROM ethereum.aggregated_deltas
+    WHERE tx_date >= (
+        SELECT distinct toDate(block_time)
+        FROM discrepancy_log
+        WHERE fixed_flag = 0
+        AND block = next_block_to_fix)
+    AND (address_bin, currency_id) IN (
+        SELECT distinct address_bin, currency_id
+        FROM discrepancy_log
+        WHERE fixed_flag = 0
+        AND block = next_block_to_fix)
+    GROUP BY tx_date, address_bin, currency_id)
 SELECT
     d1.tx_date,
     d1.address_bin,
     d1.currency_id,
     sum(d2.balance_delta) AS cumulative_balance
-FROM ethereum.aggregated_deltas d1
-JOIN ethereum.aggregated_deltas d2
+FROM affected_deltas d1
+JOIN deltas d2
 ON d1.address_bin = d2.address_bin
 AND d1.currency_id = d2.currency_id
 WHERE d2.tx_date <= d1.tx_date
-AND d1.tx_date >= (
-    SELECT toDate(block_time)
-    FROM discrepancy_log
-    WHERE fixed_flag = 0
-    AND block = next_block_to_fix)
-AND (d1.address_bin, d1.currency_id) IN (
-    SELECT distinct address_bin, currency_id
-    FROM discrepancy_log
-    WHERE fixed_flag = 0
-    AND block = next_block_to_fix)
 GROUP BY d1.tx_date, d1.address_bin, d1.currency_id
 ORDER BY d1.address_bin, d1.tx_date;
 
 
 ALTER TABLE discrepancy_log
 UPDATE fixed_flag = 1
+WHERE block = next_block_to_fix;
+
+ALTER TABLE discrepancy_log
+UPDATE fixed_dtm = now()
 WHERE block = next_block_to_fix;
 
 ALTER TABLE discrepancy_log

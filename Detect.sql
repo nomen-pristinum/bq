@@ -23,7 +23,13 @@ FROM balance_deltas
 WHERE block NOT IN (
     SELECT DISTINCT block
     FROM transfers_tx_storage
-    );
+    )
+AND block NOT IN (
+    SELECT DISTINCT block
+    FROM discrepancy_log
+    where fixed_flag = 0
+    )
+;
 
 ALTER TABLE discrepancy_log
 UPDATE next_block_to_fix = (

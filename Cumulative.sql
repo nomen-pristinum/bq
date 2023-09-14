@@ -17,7 +17,7 @@ SELECT
 FROM aggregated_deltas
 GROUP BY address_bin, currency_id;
 
---MV inserting into it FROM balance deltas WHERE date = today()
+--MV inserting into it FROM balance deltas 
 CREATE MATERIALIZED VIEW current_balances_mv
 to current_balances
 as
@@ -60,18 +60,19 @@ ORDER BY (tx_date, address_bin, currency_id);
 --MV inserting the changes of current balances into Cumulative History table
 CREATE MATERIALIZED VIEW cumulative_balances_history_mv
 TO cumulative_balances_history AS
-select today() AS tx_date,
-       address_bin,
-       currency_id,
-       cb.balance --already updated
-           AS cumulative_balance
-from ( --just a trigger ensuring 1-1 join
+WITH change AS (
     SELECT address_bin,
         currency_id,
         sum(value) as daily_change
     FROM balance_deltas
     WHERE tx_date = today()
-    GROUP BY  address_bin, currency_id)
+    GROUP BY address_bin, currency_id)
+select today() AS tx_date,
+       address_bin,
+       currency_id,
+       cb.balance --already updated
+           AS cumulative_balance
+from change
 JOIN current_balances_vw cb
 USING (address_bin, currency_id);
 
@@ -79,6 +80,14 @@ USING (address_bin, currency_id);
 CREATE MATERIALIZED VIEW cumulative_balances_history_fix_mv
 TO cumulative_balances_history
 AS
+WITH change as (
+    SELECT tx_date,
+        address_bin,
+        currency_id,
+        sum(value) as daily_change
+    FROM ethereum.balance_deltas
+    WHERE tx_date < today()
+    GROUP BY tx_date, address_bin, currency_id)
 SELECT tx_date,
        address_bin,
        currency_id,
@@ -88,51 +97,40 @@ FROM (
     SELECT tx_date,
         address_bin,
         currency_id,
-        cumulative_balance,
-        daily_change,
+        h.cumulative_balance,
+        change.daily_change,
         count(*) OVER (
             PARTITION BY tx_date, address_bin, currency_id)
             AS cnt
-    FROM (
-        SELECT tx_date,
-            address_bin,
-            currency_id,
-            sum(value) as daily_change
-        FROM ethereum.balance_deltas
-        WHERE tx_date < today()
-        GROUP BY tx_date, address_bin, currency_id) ch
+    FROM change
         --changes only, trigger
     JOIN cumulative_balances_history h
-    ON ch.address_bin = h.address_bin
-    AND ch.currency_id = h.currency_id
-    WHERE ch.tx_date <= h.tx_date
+    ON change.address_bin = h.address_bin
+    AND change.currency_id = h.currency_id
+    WHERE change.tx_date <= h.tx_date
 )
 GROUP BY tx_date, address_bin, currency_id;
 
 
 /* initial load, run if there is existing data in transfers_tx_storage */
+
 INSERT INTO cumulative_balances_history
+WITH deltas AS (
+--here we reach an order of magnitude less records through previous processing
+SELECT
+        tx_date,
+        address_bin,
+        currency_id,
+        sum(balance_delta) as balance_delta
+    FROM ethereum.aggregated_deltas
+    GROUP BY tx_date, address_bin, currency_id)
 SELECT
     d1.tx_date,
     d1.address_bin,
     d1.currency_id,
     sum(d2.balance_delta) AS cumulative_balance
-FROM ( --surprisingly small performance loss here:
-    SELECT
-        tx_date,
-        address_bin,
-        currency_id,
-        sum(balance_delta) as balance_delta
-    FROM ethereum.aggregated_deltas
-    GROUP BY tx_date, address_bin, currency_id) d1
-JOIN (
-    SELECT
-        tx_date,
-        address_bin,
-        currency_id,
-        sum(balance_delta) as balance_delta
-    FROM ethereum.aggregated_deltas
-    GROUP BY tx_date, address_bin, currency_id) d2
+FROM deltas d1
+JOIN deltas d2
 ON d1.address_bin = d2.address_bin
 AND d1.currency_id = d2.currency_id
 WHERE d2.tx_date <= d1.tx_date
@@ -145,19 +143,13 @@ AS
 SELECT *
 FROM (
     SELECT tx_date,
-         address_bin,
+         hex(address_bin) as address_hex,
          currency_id,
          cumulative_balance,
          max(tx_date) OVER (
              PARTITION BY address_bin, currency_id)
              AS last_balance_date
-    FROM cumulative_balances_history FINAL /*(
-        SELECT tx_date,
-               address_bin,
-               currency_id,
-               sum(cumulative_balance) as cumulative_balance
-        FROM cumulative_balances_history
-        GROUP BY tx_date, address_bin, currency_id)*/
+    FROM cumulative_balances_history FINAL
     WHERE tx_date <= today()
 )
 WHERE tx_date = last_balance_date
@@ -166,5 +158,5 @@ WHERE tx_date = last_balance_date
 
 SELECT
     *
-FROM daily_balances
-WHERE cumulative_balance <0;
+FROM current_balances
+WHERE balance <0;
