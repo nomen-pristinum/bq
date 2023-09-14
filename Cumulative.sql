@@ -39,8 +39,12 @@ GROUP BY address_bin, currency_id;
 
 CREATE VIEW top_holders_vw
 as
-SELECT *
+SELECT
+    hex(address_bin),
+    currency_id,
+    sum(balance) as balance
 FROM current_balances
+GROUP BY address_bin, currency_id
 ORDER BY balance desc
 LIMIT 100;
 
