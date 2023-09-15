@@ -39,7 +39,7 @@ WHERE (address_bin, currency_id) IN (
     FROM discrepancy_log
     WHERE fixed_flag = 0
     AND block = next_block_to_fix)
-AND tx_date = (SELECT toDate(block_time)
+AND tx_date = (SELECT distinct toDate(block_time)
     FROM discrepancy_log
     WHERE fixed_flag = 0
     AND block = next_block_to_fix);

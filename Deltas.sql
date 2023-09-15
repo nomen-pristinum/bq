@@ -23,6 +23,7 @@ FROM ethereum.balance_deltas;
 CREATE VIEW ethereum.aggregated_deltas_vw
 AS
 SELECT
+    tx_date,
     hex(address_bin) as address_hex,
     currency_id,
     sum(balance_delta) as balance

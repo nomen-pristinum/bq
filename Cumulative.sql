@@ -61,7 +61,7 @@ CREATE TABLE ethereum.cumulative_balances_history
 ) ENGINE = ReplacingMergeTree(cumulative_balance)
 ORDER BY (tx_date, address_bin, currency_id);
 
---MV inserting the changes of current balances into Cumulative History table
+--lightweight MV inserting the changes of current balances into Cumulative History table
 CREATE MATERIALIZED VIEW cumulative_balances_history_mv
 TO cumulative_balances_history AS
 WITH change AS (
@@ -80,8 +80,35 @@ from change
 JOIN current_balances_vw cb
 USING (address_bin, currency_id);
 
---another MV for historical data fixes
-CREATE MATERIALIZED VIEW cumulative_balances_history_fix_mv
+--MV for historical record insertion
+--TO DO: insert when needed
+CREATE MATERIALIZED VIEW cumulative_balances_history_fix_mv1
+TO cumulative_balances_history AS
+WITH deltas AS (
+--here we reach an order of magnitude less records through previous processing
+SELECT tx_date,
+        address_bin,
+        currency_id,
+        sum(value) as daily_change
+    FROM ethereum.balance_deltas
+    WHERE tx_date < today()
+    GROUP BY tx_date, address_bin, currency_id)
+SELECT
+    d1.tx_date,
+    d1.address_bin,
+    d1.currency_id,
+    sum(d2.daily_change) AS cumulative_balance
+FROM deltas d1
+JOIN deltas d2
+ON d1.address_bin = d2.address_bin
+AND d1.currency_id = d2.currency_id
+WHERE d2.tx_date <= d1.tx_date
+GROUP BY d1.tx_date, d1.address_bin, d1.currency_id
+ORDER BY d1.tx_date, d1.address_bin, d1.currency_id;
+
+
+-- MV for historical records
+CREATE MATERIALIZED VIEW cumulative_balances_history_fix_mv2
 TO cumulative_balances_history
 AS
 WITH change as (
@@ -98,7 +125,8 @@ SELECT tx_date,
        sum(cumulative_balance/cnt + daily_change)
            as cumulative_balance
 FROM (
-    SELECT tx_date,
+
+    SELECT h.tx_date as tx_date,
         address_bin,
         currency_id,
         h.cumulative_balance,
@@ -141,7 +169,8 @@ WHERE d2.tx_date <= d1.tx_date
 GROUP BY d1.tx_date, d1.address_bin, d1.currency_id
 ORDER BY d1.tx_date, d1.address_bin, d1.currency_id;
 
-
+--proof of concept view, use the query in prod with
+--the variable containing desired history date
 CREATE VIEW ethereum.cumulative_balances_history_vw
 AS
 SELECT *
@@ -154,7 +183,7 @@ FROM (
              PARTITION BY address_bin, currency_id)
              AS last_balance_date
     FROM cumulative_balances_history FINAL
-    WHERE tx_date <= today()
+    WHERE tx_date <= today() -- put date here
 )
 WHERE tx_date = last_balance_date
 ;
